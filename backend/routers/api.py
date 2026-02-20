@@ -2,16 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
 
-from backend.scrapers.reddit import get_trending_tickers
-
 router = APIRouter(prefix="/api")
-
-
-@router.get("/trending")
-def api_trending(time_filter: str = "day", limit: int = 25):
-    """Get currently trending WSB tickers."""
-    tickers = get_trending_tickers(time_filter=time_filter, limit=limit)
-    return {"tickers": [t.model_dump() for t in tickers]}
 
 
 @router.get("/stock/{ticker}")
@@ -19,7 +10,7 @@ def api_stock_detail(ticker: str):
     """Get detailed analysis for a single stock.
 
     Heavy imports (pandas, numpy, yfinance, ta) are loaded lazily
-    so they don't slow down the /trending endpoint's cold start.
+    to keep cold starts fast on Vercel serverless.
     """
     from backend.analysis.fundamental import analyze_fundamentals
     from backend.analysis.risk import analyze_risk
