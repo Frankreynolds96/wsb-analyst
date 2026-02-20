@@ -20,6 +20,10 @@
   ],
   "routes": [
     {
+      "src": "/api/trending",
+      "dest": "/api/trending.js"
+    },
+    {
       "src": "/api/(.*)",
       "dest": "/api/index.py"
     },
