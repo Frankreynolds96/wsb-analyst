@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-import time
 import logging
 from collections import defaultdict
 
@@ -72,41 +71,31 @@ def _extract_tickers(text: str) -> list:
     return list(tickers)
 
 
-def _fetch_reddit_json(url: str, max_retries: int = 3) -> list:
+def _fetch_reddit_json(url: str) -> list:
     """Fetch posts from a Reddit .json endpoint (no API key needed).
 
-    Includes retry with backoff to handle Reddit rate limiting (429).
+    Optimized for Vercel serverless (5s timeout, no retries).
     """
     posts = []
-    for attempt in range(max_retries):
-        try:
-            if attempt > 0:
-                wait = 3 * (2 ** attempt)  # 6s, 12s backoff
-                logger.info(f"  Retry {attempt + 1}/{max_retries} after {wait}s wait...")
-                time.sleep(wait)
+    try:
+        resp = httpx.get(url, headers=HEADERS, timeout=5, follow_redirects=True)
 
-            resp = httpx.get(url, headers=HEADERS, timeout=15, follow_redirects=True)
+        if resp.status_code == 429:
+            logger.warning("Reddit rate limited (429)")
+            return posts
 
-            if resp.status_code == 429:
-                logger.warning(f"Reddit rate limited (429), will retry...")
+        resp.raise_for_status()
+        data = resp.json()
+
+        children = data.get("data", {}).get("children", [])
+        for child in children:
+            post = child.get("data", {})
+            if post.get("stickied"):
                 continue
+            posts.append(post)
 
-            resp.raise_for_status()
-            data = resp.json()
-
-            # Reddit JSON wraps posts in data.children
-            children = data.get("data", {}).get("children", [])
-            for child in children:
-                post = child.get("data", {})
-                if post.get("stickied"):
-                    continue  # skip pinned mod posts
-                posts.append(post)
-            return posts  # success
-
-        except Exception as e:
-            logger.error(f"Reddit fetch error for {url}: {e}")
-            if attempt < max_retries - 1:
-                continue
+    except Exception as e:
+        logger.error(f"Reddit fetch error for {url}: {e}")
 
     return posts
 
@@ -125,17 +114,11 @@ def get_trending_tickers(
         lambda: {"count": 0, "score": 0, "comments": 0, "posts": []}
     )
 
-    # Fetch hot posts
-    cap = min(limit, 100)  # Reddit caps at 100 per request
+    # Single request only — must stay under Vercel's 10s serverless limit
+    cap = min(limit, 25)
     hot_url = f"https://www.reddit.com/r/{subreddit}/hot.json?limit={cap}"
     hot_posts = _fetch_reddit_json(hot_url)
-
-    # Small delay to be polite to Reddit
-    time.sleep(1)
-
-    # Fetch top posts for the time period
-    top_url = f"https://www.reddit.com/r/{subreddit}/top.json?t={time_filter}&limit={cap}"
-    top_posts = _fetch_reddit_json(top_url)
+    top_posts = []
 
     # Combine and deduplicate
     seen_ids = set()

@@ -79,17 +79,20 @@ def api_recommendations():
 def api_stock_detail(ticker: str):
     """Get detailed analysis for a single stock."""
     ticker = ticker.upper()
-    stock_data = get_stock_data(ticker)
-    financials = get_financial_statements(ticker)
-    fundamental = analyze_fundamentals(ticker, stock_data, financials)
-    technical = analyze_technicals(ticker, stock_data)
-    risk = analyze_risk(ticker, stock_data)
+    try:
+        stock_data = get_stock_data(ticker)
+        financials = get_financial_statements(ticker)
+        fundamental = analyze_fundamentals(ticker, stock_data, financials)
+        technical = analyze_technicals(ticker, stock_data)
+        risk = analyze_risk(ticker, stock_data)
 
-    return {
-        "ticker": ticker,
-        "info": stock_data.info.model_dump(),
-        "fundamental": fundamental.model_dump(),
-        "technical": technical.model_dump(),
-        "risk": risk.model_dump(),
-        "price_history": [bar.model_dump() for bar in stock_data.history[-60:]],
-    }
+        return {
+            "ticker": ticker,
+            "info": stock_data.info.model_dump(),
+            "fundamental": fundamental.model_dump(),
+            "technical": technical.model_dump(),
+            "risk": risk.model_dump(),
+            "price_history": [bar.model_dump() for bar in stock_data.history[-60:]],
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Analysis failed for {ticker}: {str(e)}")
